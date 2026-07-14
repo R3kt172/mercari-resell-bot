@@ -1,5 +1,10 @@
 # 🧵 ResellBot
 
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![aiogram](https://img.shields.io/badge/aiogram-3.x-2CA5E0?logo=telegram&logoColor=white)](https://docs.aiogram.dev/)
+[![Playwright](https://img.shields.io/badge/playwright-stealth-45ba4b?logo=playwright&logoColor=white)](https://playwright.dev/)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey)](#)
+
 Telegram-бот для поиска выгодных вещей под перепродажу: агрегирует лоты с нескольких площадок, сравнивает цены и считает потенциальный профит.
 
 > Grailed · eBay · StockX · Depop · Mercari JP
@@ -49,6 +54,7 @@ ResellBot — телеграм-бот для тех, кто занимается
 | Официальные API | eBay Browse API (OAuth client credentials) |
 | Внешние библиотеки | [mercapi](https://github.com/lifailon/mercapi) для Mercari JP |
 | Хранилище | SQLite (`users`, `tracked_items`, `price_history`) |
+| Конфигурация | `python-dotenv` — все секреты и настройки в `.env` |
 | Прочее | fake-useragent, dataclasses |
 
 ## Архитектура
@@ -95,30 +101,41 @@ fake-useragent
 playwright
 playwright-stealth
 mercapi
+python-dotenv
 ```
 
 ## Конфигурация
 
-Секреты **не должны лежать в коде** — сейчас в `searchbot.py` они захардкожены прямо в константах, это стоит вынести в переменные окружения перед пушем в публичный репозиторий.
+Все секреты и настройки читаются из переменных окружения через `python-dotenv` — в коде их нет.
 
-Создайте `.env`:
+```bash
+cp .env.example .env
+```
+
+Заполните `.env`:
 
 ```env
 BOT_TOKEN=your_telegram_bot_token
 EBAY_CLIENT_ID=your_ebay_app_id
 EBAY_CLIENT_SECRET=your_ebay_cert_id
 EBAY_MARKETPLACE_ID=EBAY_US
+USDJPY_RATE=150
 USE_PROXY=false
 PROXY=http://user:pass@host:port
+REQUEST_TIMEOUT=25
+MAX_RESULTS=15
 ```
 
-И подгружайте их через `python-dotenv` / `os.environ` вместо констант в начале файла.
+| Переменная | Обязательна | Где взять / что это |
+|---|---|---|
+| `BOT_TOKEN` | ✅ | [@BotFather](https://t.me/BotFather) — без него бот не стартует |
+| `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` | нет | [developer.ebay.com](https://developer.ebay.com) → Application Keys → **Production** keyset. Без них просто не будет работать поиск по eBay, остальные площадки не затронуты |
+| `EBAY_MARKETPLACE_ID` | нет | регион/валюта выдачи eBay, по умолчанию `EBAY_US` |
+| `USDJPY_RATE` | нет | курс йены; статическая константа, обновляйте вручную раз в неделю или подтяните через любой currency API |
+| `USE_PROXY` / `PROXY` | нет | прокси для парсинга площадок |
+| `REQUEST_TIMEOUT` / `MAX_RESULTS` | нет | таймаут запросов (сек) и лимит карточек в выдаче |
 
-| Переменная | Где взять |
-|---|---|
-| `BOT_TOKEN` | [@BotFather](https://t.me/BotFather) |
-| `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` | [developer.ebay.com](https://developer.ebay.com) → Application Keys → **Production** keyset |
-| `USDJPY_RATE` | курс йены; можно раз в неделю подтягивать через любой currency API вместо константы |
+При отсутствии `BOT_TOKEN` бот сразу останавливается с понятной ошибкой в логах — так проще поймать забытый `.env` при деплое.
 
 ## Запуск
 
@@ -133,8 +150,11 @@ python searchbot.py
 ```
 .
 ├── searchbot.py          # весь бот: БД, парсеры, FSM, хендлеры
-├── resell_bot.db          # SQLite, создаётся автоматически
+├── .env.example           # шаблон переменных окружения
+├── .env                    # ваши секреты (в .gitignore, не коммитится)
+├── resell_bot.db           # SQLite, создаётся автоматически
 ├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
@@ -167,7 +187,7 @@ price_history    (id, item_id, price, checked_at)
 
 ## Roadmap
 
-- [ ] Вынести конфиг в `.env` / `pydantic-settings`
+- [x] Вынести конфиг в `.env` / `python-dotenv`
 - [ ] Разбить `searchbot.py` на модули
 - [ ] Фоновый воркер для авто-обновления цен отслеживаемых лотов и алертов при падении цены
 - [ ] Ротация прокси для браузерных парсеров
@@ -178,6 +198,7 @@ price_history    (id, item_id, price, checked_at)
 
 Перед публикацией репозитория:
 
-1. Замените захардкоженный `BOT_TOKEN` и eBay-ключи на переменные окружения.
-2. Если токен бота уже засветился в истории коммитов — **отзовите его через [@BotFather](https://t.me/BotFather)** (`/revoke`) и выпустите новый: старый нужно считать скомпрометированным.
-3. Добавьте `.env` в `.gitignore`.
+1. Убедитесь, что `BOT_TOKEN` и eBay-ключи заданы только в `.env`, а не в коде — в текущей версии `searchbot.py` они уже читаются из окружения.
+2. Если старый токен бота когда-либо был закоммичен в историю git — **отзовите его через [@BotFather](https://t.me/BotFather)** (`/revoke`) и выпустите новый: скомпрометированный токен нужно считать утёкшим независимо от того, публичный репозиторий или приватный.
+3. Проверьте, что `.env` действительно в `.gitignore` (он уже добавлен) — `git status` не должен его показывать.
+4. Если репозиторий уже был запушен со старым `searchbot.py` с хардкодом — секреты остаются в истории коммитов даже после их удаления из последнего коммита. Либо перепишите историю (`git filter-repo` / BFG Repo-Cleaner), либо начните с чистого репозитория.
